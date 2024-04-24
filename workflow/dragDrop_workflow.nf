@@ -12,30 +12,28 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-nextflow.enable.dsl=2 
+
 // Import modules/subworkflows
-include { TRANSFER_INTEGRITY } from '../modules/transfer_integrity.nf' 
 include { METADATA_SUBMISSION } from '../modules/metadata_submission.nf'
 include { BULK_WEBINCLI } from '../modules/bulk_webincli.nf'
 include { EMAILER as METADATA_EMAILER } from '../modules/emailer.nf' //to link the emailer.nf
 include { EMAILER as WEBINCLI_EMAILER } from '../modules/emailer.nf' //to link the emailer.nf
 
-
-workflow dragDrop_workflow { 
+workflow dragDrop_workflow {
+conda = "${projectDir}/package-list.yaml" 
     take:
+        spreadsheet
 	    webin_account  
 	    webin_password
         action
         xml_output
         context
+        files_dir
         mode
         webinCli_dir
         sender_email
         rec_email
         password
-        uuid
-        transfer_output
-	    transfer_flag
         environment
 
 
@@ -44,14 +42,13 @@ workflow dragDrop_workflow {
     bulkWebinCli_emailer_ch
 
     main:
-        transfer_integrity_ch = TRANSFER_INTEGRITY(params.uuid, params.transfer_output, params.transfer_flag)
-        metadata_submission_ch = METADATA_SUBMISSION(TRANSFER_INTEGRITY.out.spreadsheet_dir, webin_account, webin_password, action, xml_output, environment)
-        bulk_webincli_ch = BULK_WEBINCLI(METADATA_SUBMISSION.out.spreadsheet_log, webin_account, webin_password, context, TRANSFER_INTEGRITY.out.dataFiles_dir, mode, webinCli_dir, environment)
+        metadata_submission_ch = METADATA_SUBMISSION(spreadsheet, webin_account, webin_password, action, xml_output, environment)
+        bulk_webincli_ch = BULK_WEBINCLI(METADATA_SUBMISSION.out.spreadsheet_log, webin_account, webin_password, context, files_dir, mode, webinCli_dir, environment)
 
         metadata_emailer_ch = METADATA_EMAILER(METADATA_SUBMISSION.out.metadata_log, '/' , sender_email, rec_email, password)
         bulkWebinCli_emailer_ch = WEBINCLI_EMAILER('/', BULK_WEBINCLI.out.webinCli_log, sender_email, rec_email, password)
 }
 
 workflow {
-    dragDrop_workflow(params.webin_account, params.webin_password, params.action, params.xml_output, params.context, params.mode, params.webinCli_dir, params.sender_email, params.rec_email, params.password, params.uuid, params.transfer_output, params.transfer_flag, params.environment)
+    dragDrop_workflow(params.spreadsheet, params.webin_account, params.webin_password, params.action, params.xml_output, params.context, params.files_dir, params.mode, params.webinCli_dir, params.sender_email, params.rec_email, params.password, params.environment)
 }

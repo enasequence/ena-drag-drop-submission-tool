@@ -5,7 +5,7 @@ nextflow.enable.dsl=2
 process METADATA_SUBMISSION {
 	tag "metadata_submission"                  
 	label 'default'                
-	publishDir "$output", mode: 'copy' 
+	//publishDir "$output", mode: 'copy' 
 
 input:
 	path spreadsheet

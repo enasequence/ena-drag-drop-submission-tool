@@ -28,7 +28,8 @@ class TrimmingSpreadsheet:
        self.spreadsheet = spreadsheet
 
     def __getitem__(self, index):
-        return self.spreadsheet_parsed()[index]
+        return self.spreadsheet_parsed()[index], self.spreadsheet_upload()[index]
+
 
     """
     General trimming to the metadata in the spreadsheet and save it in a panda dataframe object
@@ -55,11 +56,14 @@ class TrimmingSpreadsheet:
 
     def spreadsheet_upload(self):
         if fnmatch.fnmatch(self.spreadsheet, '*.xls*'):
-            metadata_df = pd.read_excel(self.spreadsheet, header=0, sheet_name='Sheet1')
+            latest_spreadsheet = self.spreadsheet
+            metadata_df = pd.read_excel(latest_spreadsheet, header=0, sheet_name='Sheet1')
         elif fnmatch.fnmatch(self.spreadsheet, '*txt*') or fnmatch.fnmatch(self.spreadsheet, '*tsv*'):
-            metadata_df = pd.read_csv(self.spreadsheet, sep="\t", header=0, encoding= 'ISO-8859-1')
+            latest_spreadsheet = self.spreadsheet
+            metadata_df = pd.read_csv(latest_spreadsheet, sep="\t", header=0, encoding= 'ISO-8859-1')
         elif fnmatch.fnmatch(self.spreadsheet, '*csv*'):
-            metadata_df = pd.read_csv(self.spreadsheet, sep=",", header=0, encoding= 'ISO-8859-1')
+            latest_spreadsheet = self.spreadsheet
+            metadata_df = pd.read_csv(latest_spreadsheet, sep=",", header=0, encoding= 'ISO-8859-1')
         else:
             wildcard = f"{self.spreadsheet}"
             all_files = [f.path for f in os.scandir(wildcard) if fnmatch.fnmatch(f, '*.xls*') or fnmatch.fnmatch(f, '*.txt*') or fnmatch.fnmatch(f, '*.tsv*') or fnmatch.fnmatch(f, '*.csv*')]
@@ -70,15 +74,14 @@ class TrimmingSpreadsheet:
                 metadata_df = pd.read_csv(latest_spreadsheet, sep="\t", header=0, encoding= 'ISO-8859-1')
             elif fnmatch.fnmatch(latest_spreadsheet, '*csv*'):
                 metadata_df = pd.read_csv(latest_spreadsheet, sep=",", header=0, encoding= 'ISO-8859-1')
-
             else:
                 print(f'you have used an unsupported spreadsheet: {latest_spreadsheet}, please try again')
 
-        return metadata_df
+        return [metadata_df, latest_spreadsheet]
 
     def spreadsheet_parsed(self):
         spreadsheet_df = self.spreadsheet_upload()
-        study_df = spreadsheet_df.loc[:, 'Study':'Sample - Mandatory (ERC000033)']
+        study_df = spreadsheet_df[0].loc[:, 'Study':'Sample - Mandatory (ERC000033)']
         studyTrimmed_1_df = study_df.drop('Sample - Mandatory (ERC000033)', axis=1).drop([2, 1, 3], axis=0)
         studyTrimmed_2_df = studyTrimmed_1_df.rename(columns=studyTrimmed_1_df.iloc[0]).drop(
             studyTrimmed_1_df.index[0]).reset_index(drop=True)
@@ -89,21 +92,19 @@ class TrimmingSpreadsheet:
             StudyTrimmed_Final = studyTrimmed_2_df
 
         try:
-            analysis_df = spreadsheet_df.loc[:, 'Isolate Genome Assembly information':'Study']
+            analysis_df = spreadsheet_df[0].loc[:, 'Isolate Genome Assembly information':'Study']
             analysisTrimmed_df = analysis_df.drop('Study', axis=1).drop([2, 1, 3], axis=0)
             analysisTrimmedFinal = analysisTrimmed_df.rename(columns=analysisTrimmed_df.iloc[0]).drop(
                 analysisTrimmed_df.index[0]).reset_index(drop=True)
-            #print(analysisTrimmedFinal)
 
 
-            experiment_df = spreadsheet_df.loc[:, 'Run/Experiment information for associated raw reads':]
+            experiment_df = spreadsheet_df[0].loc[:, 'Run/Experiment information for associated raw reads':]
             experimentTrimmed_df = experiment_df.drop([2, 1, 3], axis=0)
             experimentTrimmedFinal = experimentTrimmed_df.rename(columns=experimentTrimmed_df.iloc[0]).drop(
                 experimentTrimmed_df.index[0]).reset_index(drop=True)
-            #print(experimentTrimmedFinal)
 
 
-            sample_df = spreadsheet_df.loc[:, 'Sample - Mandatory (ERC000033)':'Run/Experiment information for associated raw reads']
+            sample_df = spreadsheet_df[0].loc[:, 'Sample - Mandatory (ERC000033)':'Run/Experiment information for associated raw reads']
             sampleTrimmed_1_df = sample_df.drop('Run/Experiment information for associated raw reads', axis=1).drop([2, 1, 3], axis=0)
             sampleTrimmed_2_df = sampleTrimmed_1_df.rename(columns=sampleTrimmed_1_df.iloc[0]).drop(
                 sampleTrimmed_1_df.index[0]).reset_index(drop=True)
@@ -113,21 +114,17 @@ class TrimmingSpreadsheet:
             else:
                 sampleTrimmed_Final = sampleTrimmed_2_df
 
-
-
-
-
             return StudyTrimmed_Final, sampleTrimmed_Final, experimentTrimmedFinal, analysisTrimmedFinal
 
         except KeyError as e:
             if fnmatch.fnmatch(str(e), '*Isolate Genome Assembly information*'):
-                experiment_df = spreadsheet_df.loc[:, 'Run/Experiment':]
+                experiment_df = spreadsheet_df[0].loc[:, 'Run/Experiment':]
                 experimentTrimmed_df = experiment_df.drop([2, 1, 3], axis=0)
                 experimentTrimmedFinal = experimentTrimmed_df.rename(columns=experimentTrimmed_df.iloc[0]).drop(
                     experimentTrimmed_df.index[0]).reset_index(drop=True)
 
 
-                sample_df = spreadsheet_df.loc[:, 'Sample - Mandatory (ERC000033)':'Run/Experiment']
+                sample_df = spreadsheet_df[0].loc[:, 'Sample - Mandatory (ERC000033)':'Run/Experiment']
                 sampleTrimmed_1_df = sample_df.drop('Run/Experiment', axis=1).drop([2, 1, 3], axis=0)
                 sampleTrimmed_2_df = sampleTrimmed_1_df.rename(columns=sampleTrimmed_1_df.iloc[0]).drop(
                     sampleTrimmed_1_df.index[0]).reset_index(drop=True)

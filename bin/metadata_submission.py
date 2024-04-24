@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # Copyright [2020] EMBL-European Bioinformatics Institute
 #
@@ -81,6 +81,8 @@ def submission_command(metadata_type, release_date=None, study_release_date=None
      """
     archive_dir = create_outdir(f'{args.output}/xml_archive') # create the archive folder
     log_dir = create_outdir(f'{args.output}/logs') # create the log folder
+    print(log_dir)
+    print(archive_dir)
     now = datetime.now()
     now_str = now.strftime("%d%m%y-%H%M") # datetime in minutes format
     if args.test is True:  # if there is a test flag
@@ -198,7 +200,7 @@ def main_spreadsheet():
      :returns trimmed but fully intact spreadsheet as a dataframe
      """
 
-    spreadsheet_original = TrimmingSpreadsheet(args.file).spreadsheet_upload()
+    spreadsheet_original = TrimmingSpreadsheet(args.file).spreadsheet_upload()[0]
     spreadsheet_original = spreadsheet_original.drop(spreadsheet_original.columns[0], axis=1).drop([2, 1, 3], axis=0)
     spreadsheet_original = spreadsheet_original.rename(columns=spreadsheet_original.iloc[0]).drop(spreadsheet_original.index[0]).reset_index(drop=True)
     return spreadsheet_original
@@ -322,10 +324,10 @@ def samples_final_arrangment(spreadsheet_original,metadata, experiment_OR_analys
         samples_with_acc = []
         samples_without_acc = []
         for index, row in metadata[1].iterrows():
-            if not pd.isna(row[0]):
-                samples_with_acc.append(row[0]) # fetching the accession ready in the spreadsheet ( no need for submission)
+            if not pd.isna(row.iloc[0]):
+                samples_with_acc.append(row.iloc[0]) # fetching the accession ready in the spreadsheet ( no need for submission)
             else:
-                samples_without_acc.append(row[1]) # fetching the alias for the samples that missing accession ( need for submission)
+                samples_without_acc.append(row.iloc[1]) # fetching the alias for the samples that missing accession ( need for submission)
         samples_without_acc_df= pd.DataFrame(samples_without_acc, columns=['sample_alias']) # dataframe for samples that needs accession
 
 
@@ -448,12 +450,40 @@ def chromosome_list(value):
     return new_value
 
 
+def create_new_spreadsheet_with_Accession(spreadsheet_original,metadata_acc, experiment_OR_analysis ):
+    spreadsheet_original_modified = spreadsheet_original.drop(['study_accession', 'sample_accession'], axis=1)
+    updated_original_spreadsheet = pd.merge(spreadsheet_original_modified, metadata_acc,
+                                            on=[experiment_OR_analysis, "study_alias", "sample_alias"],
+                                            how='left')  # concat the study+sample metadata with the original spreadsheet
+    original_columns = list(spreadsheet_original.columns)
+    updated_original_spreadsheet = updated_original_spreadsheet.reindex(columns=original_columns)
+    spreadsheet_NoTrimming = TrimmingSpreadsheet(args.file).spreadsheet_upload()[0]
+    latest_spreadsheet_path = TrimmingSpreadsheet(args.file).spreadsheet_upload()[1]
+    spreadsheet_NoTrimming_columns = list(spreadsheet_NoTrimming.columns)
+    top_columns = spreadsheet_NoTrimming.iloc[0:4]
+    first_column = spreadsheet_NoTrimming['Unnamed: 0'].drop([2, 1, 3], axis=0)
+    updated_original_spreadsheet.insert(0, 'Unnamed: 0', first_column)
+    updated_original_spreadsheet.columns = spreadsheet_NoTrimming_columns
+    updated_original_spreadsheet = pd.concat([top_columns, updated_original_spreadsheet]).reset_index(drop=True)
+    updated_original_spreadsheet.to_excel(
+        f"{latest_spreadsheet_path.rstrip('withAccessions.xlsx').rstrip('xls').rstrip('xlsx').rstrip('txt').rstrip('csv')}.withAccessions.xlsx",
+        index=False)  # print out the the modified spreadsheet
+
+
+
+
 def main():
 
     """The main section"""
 
     spreadsheet_original = main_spreadsheet()  # capture the spreadsheet for reference
     create_outdir(args.output) # create the output directory
+    create_outdir(f'{args.output}/logs')  # create the log folder
+
+    for submission_logs in glob.glob(f'{args.output}/logs/submission_logs_*'):
+        if os.path.exists(submission_logs):
+            create_outdir(f'{args.output}/logs/archived_logs')
+            shutil.move(submission_logs, f'{args.output}/logs/archived_logs/{os.path.basename(submission_logs)}')
 
     '''
     This block will run only if there is an experimental/analysis part filled in the spreadsheet
@@ -489,7 +519,7 @@ def main():
         else:  # some studies needs to be submitted
             if not pd.isna(metadata_study['study_accession']).any():  # all the studies dont need any submission
                 study_acc_df = studies_final_arrangment(spreadsheet_original, metadata, experiment_OR_analysis)  # arrange the studies metadata format
-                metadata_acc = pd.concat([study_acc_df, sample_acc_df], join='outer', axis=1).fillna(method='ffill')  # merge the study dataframe with the sample dataframe after all the metadata that needs to be submitted is processed and fill the NA's
+                metadata_acc = pd.concat([study_acc_df, sample_acc_df], join='outer', axis=1).ffill()  # merge the study dataframe with the sample dataframe after all the metadata that needs to be submitted is processed and fill the NA's
 
 
             else:  # some studies needs to be submitted and some are not
@@ -506,9 +536,15 @@ def main():
         '''
 
         experimental_spreadsheet = metadata_acc.merge(experimental_spreadsheet, on=experiment_OR_analysis,how='right')  # concat the study+sample metadata with the experiment/analysis metadata
+
+        create_new_spreadsheet_with_Accession(spreadsheet_original, metadata_acc,experiment_OR_analysis)
+
+
         experimental_spreadsheet = experimental_spreadsheet.drop(['study_alias', 'sample_alias'], axis=1)  # remove the aliases
         if os.path.exists(f"{args.output}/experimental_spreadsheet.xlsx"):
             os.remove(f"{args.output}/experimental_spreadsheet.xlsx")
+
+
         if not pd.isna(experimental_spreadsheet['study_accession']).any() and not pd.isna(experimental_spreadsheet['sample_accession']).any():
             experimental_spreadsheet = experimental_spreadsheet.dropna(axis=1, how='all')  # remove the empty columns
             experimental_spreadsheet["submission_tool"] = 'drag and drop uploader tool'  # to inject submission_tool into experimental_spreadsheet
