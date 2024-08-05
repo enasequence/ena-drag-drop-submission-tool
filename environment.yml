@@ -1,6 +1,5 @@
 name: DragDrop_transfer
 channels:
-  - defaults
   - conda-forge
   - bioconda
 dependencies:
